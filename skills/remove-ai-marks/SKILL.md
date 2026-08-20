@@ -87,11 +87,20 @@ The machine-readable contract lives at `$WM/openapi.json` — plug it into any
 OpenAPI tooling (client generators, Swagger UI, editors) instead of hand-rolling
 clients.
 
-`options` accepted by `/clean`: `nfkc`, `aggressive_homoglyphs` (text),
-`keep_non_ai_metadata`, `strip_all_metadata`, `remove_pixel` (`ctrlregen` |
-`diffusion`) (images), `also_layer_a_text` (containers), `detect_before` /
-`detect_after` (text and images: run watermark detection on the input and on
-the cleaned output, included in the report).
+`options` accepted by `/clean`: `nfkc`, `aggressive_homoglyphs`, `strip_bidi`
+(text and any container that runs Layer A), `keep_non_ai_metadata`,
+`strip_all_metadata`, `remove_pixel` (`ctrlregen` | `diffusion`) (images),
+`also_layer_a_text` (containers), `detect_before` / `detect_after` (text and
+images: run watermark detection on the input and on the cleaned output,
+included in the report).
+
+`strip_bidi` is off by default and should stay that way unless you have looked
+at the text. Paired directional embeddings (LRE/RLE/PDF) are load-bearing in
+genuine RTL content — Arabic, Hebrew, mixed-script quotes — so a default strip
+would corrupt legitimate documents to remove a carrier that is only sometimes
+one. `/inspect` reports bidi controls either way; turn the flag on when they
+are decorative or when a carrier is confirmed, and say in your summary that
+directional formatting was removed.
 
 **Inspect first** (decide, don't guess):
 

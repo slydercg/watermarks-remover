@@ -84,6 +84,7 @@ MAX_BATCH_FILES = int(os.environ.get("WATERMARKS_MAX_BATCH_FILES", "50"))
 ALLOWED_CLEAN_OPTIONS = {
     "nfkc": bool,
     "aggressive_homoglyphs": bool,
+    "strip_bidi": bool,
     "keep_non_ai_metadata": bool,
     "also_layer_a_text": bool,
     "remove_pixel": str,
@@ -747,6 +748,7 @@ def _clean_payload(data: bytes, name: str, options: dict[str, Any]) -> dict[str,
                 text,
                 nfkc=bool(options.get("nfkc")),
                 aggressive_homoglyphs=bool(options.get("aggressive_homoglyphs")),
+                strip_bidi=bool(options.get("strip_bidi")),
             )
             if detect_after:
                 detector_reports["after"] = run_text_detectors(cleaned)
@@ -813,6 +815,7 @@ def _clean_payload(data: bytes, name: str, options: dict[str, Any]) -> dict[str,
                 dest,
                 fmt=container_fmt,
                 also_layer_a_text=bool(options.get("also_layer_a_text", True)),
+                strip_bidi=bool(options.get("strip_bidi")),
             )
             cleaned_bytes = dest.read_bytes()
             report = {"kind": "container", **result}

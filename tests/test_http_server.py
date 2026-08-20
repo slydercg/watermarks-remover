@@ -190,6 +190,7 @@ def test_unknown_option_rejected(conn):
         ("keep_non_ai_metadata", None, "boolean"),
         ("also_layer_a_text", {}, "boolean"),
         ("strip_all_metadata", [], "boolean"),
+        ("strip_bidi", "yes", "boolean"),
         ("remove_pixel", False, "string"),
     ],
 )
@@ -400,3 +401,79 @@ def test_clean_extensionless_svg_container_post_inspection(conn):
     assert body["kind"] == "container"
     assert body["report"]["format"] == "svg"
     assert body["report"]["still_has_c2pa"] is False
+
+
+# --- strip_bidi over HTTP -------------------------------------------------
+#
+# Paired bidi embeddings are load-bearing for RTL text, so Layer A preserves
+# them by default. The flag existed only on the clean_text CLI, which the skill
+# forbids calling; without it the service could report bidi controls via
+# /inspect but never remove them. These cover the option end to end on every
+# route that runs Layer A.
+
+_BIDI = "\u202aNext steps:\u202c and RTL \u202b\u0645\u0631\u062d\u0628\u0627\u202c done\n"
+
+
+def _clean(conn, name: str, data: bytes, **options) -> bytes:
+    status, body = _post(conn, "/clean", {"file": _b64(data), "name": name, "options": options})
+    assert status == 200, body
+    return base64.b64decode(body["cleaned"])
+
+
+@pytest.mark.parametrize("name", ["notes.txt", "notes.md"])
+def test_bidi_preserved_by_default(conn, name):
+    """Default cleaning must not disturb paired embeddings (text and container)."""
+    out = _clean(conn, name, _BIDI.encode("utf-8")).decode("utf-8")
+    assert "\u202a" in out and "\u202c" in out
+
+
+@pytest.mark.parametrize("name", ["notes.txt", "notes.md"])
+def test_strip_bidi_removes_embeddings(conn, name):
+    out = _clean(conn, name, _BIDI.encode("utf-8"), strip_bidi=True).decode("utf-8")
+    assert "\u202a" not in out
+    assert "\u202b" not in out
+    assert "\u202c" not in out
+    assert "Next steps:" in out
+    assert "\u0645\u0631\u062d\u0628\u0627" in out  # the RTL word itself survives
+
+
+def test_strip_bidi_reaches_ooxml_text_runs(conn, tmp_path):
+    """The option must thread into zip containers, not just flat text."""
+    import zipfile
+
+    src = tmp_path / "doc.docx"
+    doc = (
+        '<?xml version="1.0"?><w:document '
+        'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:body><w:p><w:r><w:t>{_BIDI.strip()}</w:t></w:r></w:p></w:body></w:document>"
+    )
+    with zipfile.ZipFile(src, "w") as z:
+        z.writestr(
+            "[Content_Types].xml",
+            '<?xml version="1.0"?><Types '
+            'xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>',
+        )
+        z.writestr("word/document.xml", doc)
+
+    raw = src.read_bytes()
+    kept = _clean(conn, "doc.docx", raw)
+    stripped = _clean(conn, "doc.docx", raw, strip_bidi=True)
+
+    def body(blob: bytes) -> str:
+        import io
+
+        with zipfile.ZipFile(io.BytesIO(blob)) as z:
+            return z.read("word/document.xml").decode("utf-8")
+
+    assert "\u202a" in body(kept)
+    assert "\u202a" not in body(stripped)
+    assert "Next steps:" in body(stripped)
+
+
+def test_strip_bidi_advertised_in_openapi(conn):
+    status, spec = _get(conn, "/openapi.json")
+    assert status == 200
+    props = spec["paths"]["/clean"]["post"]["requestBody"]["content"]["application/json"]["schema"][
+        "properties"
+    ]["options"]["properties"]
+    assert props["strip_bidi"] == {"type": "boolean"}
