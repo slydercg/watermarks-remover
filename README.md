@@ -197,6 +197,11 @@ APIs unless you ask it to:
 - **`/clean`** accepts `"detect_before"` / `"detect_after"` options to
   score the input and the cleaned output, so you can measure what a clean
   actually changed.
+- **`/clean`** accepts `"strip_bidi": true` to remove paired directional
+  embeddings (LRE/RLE/PDF) that Layer A preserves by default. `/inspect`
+  reports them either way; they are genuine formatting in RTL content, so
+  review before stripping. Applies to text and to every container that runs
+  Layer A (md, html, docx, xlsx, pptx, odt, epub).
 
 Text detectors (see `/capabilities` → `text_detectors`):
 
@@ -866,7 +871,7 @@ Industry two-layer context (C2PA + imperceptible watermark): [Institute of AI PM
 
 | Option | Removes | Notes |
 | --- | --- | --- |
-| Unicode scrub (Layer A) | ZWSP, bidi, tags, exotic spaces, … | Safe default for text |
+| Unicode scrub (Layer A) | ZWSP, tags, exotic spaces, … | Safe default for text. Paired bidi embeddings are *preserved* (load-bearing in RTL text); opt in with `strip_bidi` |
 | Rewrite (Layer B) | Statistical token marks (best-effort) | Always offered by skill; costs style — see [Disclaimer](#disclaimer-what-removing-a-text-watermark-costs) |
 | Container/metadata strip | File provenance | See format table |
 | CtrlRegen pixel removal (optional) | Pixel-domain image marks (SynthID-class, StegaStamp, Tree-Ring, StableSignature) | External backend; heavy compute; conservative strength default |
